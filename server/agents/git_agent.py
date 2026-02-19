@@ -33,7 +33,10 @@ class GitAgent:
         
         # Generate safe dir name from URL
         repo_name = repo_url.rstrip('/').split('/')[-1].replace('.git', '')
+        # Remove any invalid characters for Windows paths
+        repo_name = re.sub(r'[<>:"/\\|?*]', '_', repo_name)
         repo_dir = os.path.join(base_dir, f"{repo_name}_{int(asyncio.get_event_loop().time())}")
+        repo_dir = os.path.normpath(repo_dir)  # Normalize path for Windows
         
         # Inject token for private repos if available
         clone_url = repo_url
@@ -130,6 +133,9 @@ class GitAgent:
     
     async def _run_git(self, cwd: str, *args):
         """Run git command, raise on failure - Windows compatible"""
+        # Normalize path for Windows
+        cwd = os.path.normpath(cwd) if cwd else os.getcwd()
+        
         def _run():
             result = subprocess.run(
                 ["git"] + list(args),
