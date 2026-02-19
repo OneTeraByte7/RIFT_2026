@@ -3,3 +3,5 @@ server/.env/
 server/api/__pycache__/
 server/*/__pycache__/
 server/.env
+client/node_modules/
+client/node_modules/.cache/
