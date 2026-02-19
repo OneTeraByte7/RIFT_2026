@@ -465,12 +465,27 @@ export default function ResultsPage() {
               </div>
             </div>
           </div>
-        ) : data && (data.status === 'RUNNING' || data.status === 'STARTED') ? (
+        ) : data && (data.status === 'RUNNING' || data.status === 'STARTED') && !data.final_status ? (
           // Show running status when data is available
           <div className={`mb-6 sm:mb-8 stat-card p-4 sm:p-5 rounded-2xl border-l-4 border-blue-500 transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
             <div className="flex items-center gap-3 sm:gap-4">
               <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-3 border-blue-600 border-t-transparent flex-shrink-0"></div>
               <p className="text-blue-700 font-bold uppercase tracking-wide text-xs sm:text-sm">Agent is running... Results update automatically</p>
+            </div>
+          </div>
+        ) : data && data.final_status === 'PASSED' && (data.total_failures === 0 && data.total_fixes === 0) ? (
+          // Show success message when no failures found
+          <div className={`mb-6 sm:mb-8 stat-card p-6 sm:p-8 rounded-3xl border-l-4 border-green-500 transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="sm:w-7 sm:h-7">
+                  <path d="M20 6L9 17l-5-5" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-display text-lg sm:text-xl font-bold text-green-700 uppercase mb-1">All Tests Passing!</h3>
+                <p className="text-green-600 text-xs sm:text-sm">No failures detected - your codebase is healthy ✨</p>
+              </div>
             </div>
           </div>
         ) : null}
