@@ -1,6 +1,6 @@
 """
 Code Fixer Agent
-Uses AI (Gemini or Claude) to generate targeted, precise code fixes
+Uses AI (Gemini, Claude, or Groq) to generate targeted, precise code fixes
 Outputs in exact format required by test cases
 """
 
@@ -13,16 +13,29 @@ from pathlib import Path
 
 # Optional imports handled in __init__
 try:
-    import google.generativeai as genai
+    from google import genai  # type: ignore
     GEMINI_AVAILABLE = True
 except ImportError:
-    GEMINI_AVAILABLE = False
+    try:
+        import google.generativeai as genai  # type: ignore - fallback to old package
+        GEMINI_AVAILABLE = True
+    except ImportError:
+        genai = None  # type: ignore
+        GEMINI_AVAILABLE = False
 
 try:
-    import anthropic
+    import anthropic  # type: ignore
     ANTHROPIC_AVAILABLE = True
 except ImportError:
+    anthropic = None  # type: ignore
     ANTHROPIC_AVAILABLE = False
+
+try:
+    from groq import Groq  # type: ignore
+    GROQ_AVAILABLE = True
+except ImportError:
+    Groq = None  # type: ignore
+    GROQ_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -31,15 +44,37 @@ class CodeFixerAgent:
     """Uses AI to fix code issues with surgical precision"""
     
     def __init__(self):
-        # Try Gemini first (free tier), fallback to Claude
+        # Try Groq first (fastest), then Gemini, then Claude
+        self.groq_key = os.getenv("GROQ_API_KEY")
         self.gemini_key = os.getenv("GEMINI_API_KEY")
         self.anthropic_key = os.getenv("ANTHROPIC_API_KEY")
         
-        if self.gemini_key and GEMINI_AVAILABLE:
-            genai.configure(api_key=self.gemini_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
-            self.provider = "gemini"
-            logger.info("Using Gemini API for code fixing")
+        if self.groq_key and GROQ_AVAILABLE:
+            try:
+                self.client = Groq(api_key=self.groq_key)
+                self.model = "openai/gpt-oss-120b"
+                self.provider = "groq"
+                logger.info("Using Groq API (openai/gpt-oss-120b) for code fixing")
+            except Exception as e:
+                logger.error(f"Failed to initialize Groq: {e}")
+                self.provider = "none"
+        elif self.gemini_key and GEMINI_AVAILABLE:
+            try:
+                # Try new google.genai package first
+                if hasattr(genai, 'Client'):
+                    self.client = genai.Client(api_key=self.gemini_key)
+                    self.model_name = 'gemini-2.0-flash'
+                    self.provider = "gemini_new"
+                    logger.info("Using new Google GenAI package (gemini-2.0-flash)")
+                else:
+                    # Fallback to old package
+                    genai.configure(api_key=self.gemini_key)
+                    self.model = genai.GenerativeModel('gemini-pro')
+                    self.provider = "gemini"
+                    logger.info("Using Gemini API (gemini-pro) for code fixing")
+            except Exception as e:
+                logger.error(f"Failed to initialize Gemini: {e}")
+                self.provider = "none"
         elif self.anthropic_key and ANTHROPIC_AVAILABLE:
             self.client = anthropic.Anthropic(api_key=self.anthropic_key)
             self.model = "claude-3-5-sonnet-20241022"
@@ -47,6 +82,8 @@ class CodeFixerAgent:
             logger.info("Using Anthropic Claude API for code fixing")
         else:
             self.provider = "none"
+            if not GROQ_AVAILABLE and self.groq_key:
+                logger.warning("groq not installed. Run: pip install groq")
             if not GEMINI_AVAILABLE and self.gemini_key:
                 logger.warning("google-generativeai not installed. Run: pip install google-generativeai")
             if not ANTHROPIC_AVAILABLE and self.anthropic_key:
@@ -144,14 +181,48 @@ For each fix type:
 Return ONLY the fixed code, no markdown, no explanation."""
 
         try:
-            if self.provider == "gemini":
-                # Use Gemini API
+            if self.provider == "groq":
+                # Use Groq API
+                logger.info("Calling Groq API to fix code...")
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[{"role": "user", "content": prompt}],
+                        max_completion_tokens=8192,
+                        temperature=1,
+                        top_p=1,
+                        reasoning_effort="medium"
+                    )
+                )
+                fixed_content = response.choices[0].message.content.strip()
+                logger.info(f"Groq response received, {len(fixed_content)} characters")
+                
+            elif self.provider == "gemini_new":
+                # Use new Google GenAI API
+                logger.info("Calling new Google GenAI API to fix code...")
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=prompt
+                    )
+                )
+                fixed_content = response.text.strip()
+                logger.info(f"GenAI response received, {len(fixed_content)} characters")
+                
+            elif self.provider == "gemini":
+                # Use old Gemini API
+                logger.info("Calling Gemini API to fix code...")
                 loop = asyncio.get_event_loop()
                 response = await loop.run_in_executor(
                     None,
                     lambda: self.model.generate_content(prompt)
                 )
                 fixed_content = response.text.strip()
+                logger.info(f"Gemini response received, {len(fixed_content)} characters")
                 
             elif self.provider == "anthropic":
                 # Use Claude API
