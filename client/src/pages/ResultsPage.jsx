@@ -253,6 +253,7 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [mounted, setMounted] = useState(false)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
 
   useEffect(() => { setTimeout(() => setMounted(true), 50) }, [])
 
@@ -276,21 +277,54 @@ export default function ResultsPage() {
       const result = await response.json()
       setData(result)
       setLoading(false)
+      setIsInitialLoad(false) // Mark that we've loaded data at least once
     } catch (err) {
       console.error('Error fetching run data:', err)
       setError(err.message)
       setLoading(false)
+      setIsInitialLoad(false)
     }
   }
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-mesh-light overflow-hidden noise">
+      <div className="min-h-screen bg-mesh-light overflow-hidden noise relative">
         <Navbar theme="light" />
-        <div className="relative z-10 container mx-auto px-6 py-32">
+        
+        {/* Animated background orbs */}
+        <Orb className="blob w-[300px] h-[300px] bg-vigor-tealLight" style={{ top: '-80px', right: '-60px', animationDuration: '8s' }} />
+        <Orb className="blob-2 w-[250px] h-[250px] bg-vigor-teal" style={{ bottom: '100px', left: '-80px', animationDuration: '10s' }} />
+        
+        <div className="relative z-10 container mx-auto px-4 sm:px-6 py-32 flex items-center justify-center min-h-[80vh]">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-vigor-teal border-t-transparent"></div>
-            <p className="mt-6 text-gray-700 font-display text-xl font-bold uppercase">Loading Results...</p>
+            {/* Animated loader */}
+            <div className="relative inline-flex items-center justify-center mb-8">
+              {/* Outer rotating ring */}
+              <div className="absolute w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-vigor-tealPale animate-spin" 
+                   style={{ borderTopColor: '#3bbfa0', animationDuration: '1.5s' }}></div>
+              
+              {/* Inner pulsing circle */}
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-vigor-teal flex items-center justify-center animate-pulse">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" className="sm:w-10 sm:h-10">
+                  <path d="M9 11l3 3L22 4" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </div>
+            </div>
+            
+            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 uppercase mb-3">
+              Loading Results
+            </h2>
+            <p className="text-gray-600 text-sm sm:text-base max-w-md mx-auto">
+              Fetching healing agent data...
+            </p>
+            
+            {/* Animated dots */}
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <span className="w-2 h-2 rounded-full bg-vigor-teal animate-bounce" style={{ animationDelay: '0s' }}></span>
+              <span className="w-2 h-2 rounded-full bg-vigor-teal animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+              <span className="w-2 h-2 rounded-full bg-vigor-teal animate-bounce" style={{ animationDelay: '0.4s' }}></span>
+            </div>
           </div>
         </div>
       </div>
@@ -299,20 +333,32 @@ export default function ResultsPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-mesh-light overflow-hidden noise">
+      <div className="min-h-screen bg-mesh-light overflow-hidden noise relative">
         <Navbar theme="light" />
-        <div className="relative z-10 container mx-auto px-6 py-32">
+        
+        {/* Animated background orbs */}
+        <Orb className="blob w-[300px] h-[300px] bg-red-200 opacity-20" style={{ top: '-80px', right: '-60px', animationDuration: '8s' }} />
+        <Orb className="blob-2 w-[250px] h-[250px] bg-red-300 opacity-20" style={{ bottom: '100px', left: '-80px', animationDuration: '10s' }} />
+        
+        <div className="relative z-10 container mx-auto px-4 sm:px-6 py-32 flex items-center justify-center min-h-[80vh]">
           <div className="text-center">
-            <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-6">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="#DC2626" strokeWidth="2"/>
-                <path d="M15 9l-6 6M9 9l6 6" stroke="#DC2626" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
+            {/* Error icon with animation */}
+            <div className="relative inline-flex items-center justify-center mb-6">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-red-100 flex items-center justify-center animate-pulse">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" className="sm:w-12 sm:h-12">
+                  <circle cx="12" cy="12" r="10" stroke="#DC2626" strokeWidth="2"/>
+                  <path d="M15 9l-6 6M9 9l6 6" stroke="#DC2626" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </div>
             </div>
-            <p className="text-red-600 font-display text-2xl font-bold uppercase mb-6">{error}</p>
+            
+            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 uppercase mb-3">
+              Error Loading Results
+            </h2>
+            <p className="text-red-600 font-semibold text-base sm:text-lg mb-8 max-w-md mx-auto">{error}</p>
             <button
               onClick={() => navigate('/')}
-              className="px-8 py-4 bg-vigor-teal text-white rounded-full font-bold text-sm uppercase tracking-wide hover:bg-vigor-tealLight transition-all duration-300 shadow-glow-teal"
+              className="px-6 sm:px-8 py-3 sm:py-4 bg-vigor-teal text-white rounded-full font-bold text-sm uppercase tracking-wide hover:bg-vigor-tealLight transition-all duration-300 shadow-glow-teal hover:-translate-y-0.5"
             >
               Go Back Home
             </button>
@@ -358,28 +404,69 @@ export default function ResultsPage() {
         </div>
 
         {/* Loading indicator for running status */}
-        {data && (data.status === 'RUNNING' || data.status === 'STARTED') && (
+        {isInitialLoad && !data ? (
+          // Show loading animation while waiting for initial data
+          <div className={`mb-6 sm:mb-8 stat-card p-6 sm:p-8 rounded-3xl transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+            <div className="flex flex-col items-center justify-center py-8">
+              {/* Animated loader */}
+              <div className="relative inline-flex items-center justify-center mb-6">
+                {/* Outer rotating ring */}
+                <div className="absolute w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-blue-100 animate-spin" 
+                     style={{ borderTopColor: '#3b82f6', animationDuration: '1.2s' }}></div>
+                
+                {/* Middle ring - opposite rotation */}
+                <div className="absolute w-14 h-14 sm:w-16 sm:h-16 rounded-full border-4 border-blue-200 animate-spin" 
+                     style={{ borderBottomColor: '#60a5fa', animationDuration: '2s', animationDirection: 'reverse' }}></div>
+                
+                {/* Inner pulsing circle */}
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center animate-pulse">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="sm:w-6 sm:h-6">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="white" />
+                  </svg>
+                </div>
+              </div>
+              
+              <h3 className="font-display text-xl sm:text-2xl font-bold text-gray-900 uppercase mb-2">
+                Initializing Agent
+              </h3>
+              <p className="text-gray-600 text-sm sm:text-base text-center max-w-md">
+                Setting up the healing environment and preparing to analyze your repository...
+              </p>
+              
+              {/* Animated progress dots */}
+              <div className="flex items-center justify-center gap-2 mt-6">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0s' }}></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0.15s' }}></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0.3s' }}></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0.45s' }}></span>
+              </div>
+            </div>
+          </div>
+        ) : data && (data.status === 'RUNNING' || data.status === 'STARTED') ? (
+          // Show running status when data is available
           <div className={`mb-6 sm:mb-8 stat-card p-4 sm:p-5 rounded-2xl border-l-4 border-blue-500 transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
             <div className="flex items-center gap-3 sm:gap-4">
               <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-3 border-blue-600 border-t-transparent flex-shrink-0"></div>
               <p className="text-blue-700 font-bold uppercase tracking-wide text-xs sm:text-sm">Agent is running... Results update automatically</p>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Content Grid */}
-        <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 transition-all duration-700 delay-300 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-          {/* Left column - Summary */}
-          <div className="lg:col-span-1">
-            {data && <RunSummaryCard data={data} />}
+        {data && (
+          <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 transition-all duration-700 delay-300 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+            {/* Left column - Summary */}
+            <div className="lg:col-span-1">
+              <RunSummaryCard data={data} />
+            </div>
+            
+            {/* Right column - Details */}
+            <div className="lg:col-span-2 space-y-6 sm:space-y-8">
+              <FixesTable fixes={data.fixes_applied || []} />
+              <CICDTimeline runs={data.cicd_runs || []} maxIterations={data.max_iterations || 5} />
+            </div>
           </div>
-          
-          {/* Right column - Details */}
-          <div className="lg:col-span-2 space-y-6 sm:space-y-8">
-            {data && <FixesTable fixes={data.fixes_applied || []} />}
-            {data && <CICDTimeline runs={data.cicd_runs || []} maxIterations={data.max_iterations || 5} />}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )
