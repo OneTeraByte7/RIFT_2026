@@ -13,6 +13,7 @@ import tempfile
 from typing import Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -37,18 +38,27 @@ from agents.orchestrator import CICDHealingOrchestrator
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="CI/CD Healing Agent API",
-    description="Autonomous CI/CD pipeline healing agent with multi-agent architecture",
-    version="1.0.0"
-)
 
-@app.on_event("startup")
-async def startup_event():
-    """Set Windows event loop policy on startup"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
+    # Startup
     if platform.system() == 'Windows':
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
         logger.info("Windows ProactorEventLoop policy set")
+    
+    yield
+    
+    # Shutdown (cleanup if needed)
+    logger.info("Application shutting down")
+
+
+app = FastAPI(
+    title="CI/CD Healing Agent API",
+    description="Autonomous CI/CD pipeline healing agent with multi-agent architecture",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # CORS for React frontend
 app.add_middleware(
