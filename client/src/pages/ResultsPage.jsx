@@ -271,7 +271,8 @@ export default function ResultsPage() {
 
   const fetchRunData = async () => {
     try {
-      const response = await fetch(`/api/run/${runId}`)
+      const apiUrl = import.meta.env.VITE_API_URL || ''
+      const response = await fetch(`${apiUrl}/api/run/${runId}`)
       if (!response.ok) throw new Error('Failed to fetch run data')
       
       const result = await response.json()

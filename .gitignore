@@ -5,3 +5,5 @@ server/*/__pycache__/
 server/.env
 client/node_modules/
 client/node_modules/.cache/
+client/.env
+client/.env.production

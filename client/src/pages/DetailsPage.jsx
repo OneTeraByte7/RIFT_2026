@@ -78,7 +78,8 @@ export default function DetailsPage() {
     
     try {
       // Call the backend API to trigger the healing agent
-      const response = await fetch('/api/run', {
+      const apiUrl = import.meta.env.VITE_API_URL || ''
+      const response = await fetch(`${apiUrl}/api/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -105,7 +106,7 @@ export default function DetailsPage() {
     } catch (error) {
       console.error('Error starting agent:', error)
       setSubmitting(false)
-      alert('Failed to start healing agent. Please check if the backend is running on port 8000.')
+      alert('Failed to start healing agent. Please try again.')
     }
   }
 
