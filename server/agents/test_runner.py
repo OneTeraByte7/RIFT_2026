@@ -206,13 +206,8 @@ class TestRunnerAgent:
         if line_match:
             line_num = int(line_match.group(1))
         
-        # Determine bug type
-        bug_type = "LOGIC"  # default
-        for bt, patterns in self.BUG_TYPE_PATTERNS.items():
-            for pattern in patterns:
-                if re.search(pattern, context, re.IGNORECASE):
-                    bug_type = bt
-                    break
+        # Determine bug type using improved classifier
+        bug_type = self._classify_bug_type(context)
         
         # Extract description
         desc_lines = [l.strip() for l in context.split('\n') if l.strip() and not l.startswith('_')]
@@ -278,10 +273,14 @@ class TestRunnerAgent:
                         if assertion["status"] == "failed":
                             file_path = os.path.relpath(test_result["name"], repo_path)
                             failure_msg = "\n".join(assertion.get("failureMessages", []))
+                            
+                            # Classify bug type based on failure message
+                            bug_type = self._classify_bug_type(failure_msg)
+                            
                             failures.append({
                                 "file": file_path,
                                 "line": assertion.get("location", {}).get("line", 1) if assertion.get("location") else 1,
-                                "bug_type": "LOGIC",
+                                "bug_type": bug_type,
                                 "description": failure_msg[:200] if failure_msg else assertion.get("title", "Test failed"),
                                 "status": "pending"
                             })
@@ -307,10 +306,13 @@ class TestRunnerAgent:
                 file_match = re.search(r'(\S+\.[jt]sx?)', context)
                 line_match = re.search(r':(\d+):', context)
                 
+                # Classify bug type based on error context
+                bug_type = self._classify_bug_type(context)
+                
                 failures.append({
                     "file": file_match.group(1) if file_match else "unknown",
                     "line": int(line_match.group(1)) if line_match else 1,
-                    "bug_type": "LOGIC",
+                    "bug_type": bug_type,
                     "description": line.strip(),
                     "status": "pending"
                 })
@@ -397,3 +399,49 @@ class TestRunnerAgent:
             logger.error(f"eslint error: {e}")
         
         return failures
+    
+    def _classify_bug_type(self, error_text: str) -> str:
+        """Classify bug type from error message with priority order"""
+        error_lower = error_text.lower()
+        
+        # Check patterns in priority order (most specific first)
+        
+        # 1. SYNTAX errors (compilation/parse errors)
+        if any(pattern in error_lower for pattern in ['syntaxerror', 'syntax error', 'unexpected token', 
+                                                        'unexpected identifier', 'parseerror', 'missing semicolon',
+                                                        'unexpected end of input']):
+            return "SYNTAX"
+        
+        # 2. INDENTATION errors (Python-specific)
+        if any(pattern in error_lower for pattern in ['indentationerror', 'unexpected indent', 
+                                                        'expected an indented block', 'unindent does not match']):
+            return "INDENTATION"
+        
+        # 3. IMPORT errors (module not found)
+        if any(pattern in error_lower for pattern in ['modulenotfounderror', 'importerror', 'cannot find module',
+                                                        'no module named', 'module not found', 'cannot resolve module',
+                                                        'require is not defined']):
+            return "IMPORT"
+        
+        # 4. TYPE errors (type mismatches, null/undefined)
+        if any(pattern in error_lower for pattern in ['typeerror', 'type error', 'cannot read prop', 
+                                                        'is not a function', 'nonetype', 'attributeerror',
+                                                        'undefined is not', 'null is not', 'ts2', 'ts1']):
+            return "TYPE_ERROR"
+        
+        # 5. LINTING errors (unused vars, style issues)
+        if any(pattern in error_lower for pattern in ['unused import', 'imported but unused', 'f401',
+                                                        'unused variable', 'w0611', 'no-unused-vars',
+                                                        'undefined variable', 'e0602', 'eslint',
+                                                        'never used', 'is assigned but']):
+            return "LINTING"
+        
+        # 6. LOGIC errors (test assertions, wrong results) - Default
+        # Assertion failures, wrong calculations, business logic errors
+        if any(pattern in error_lower for pattern in ['assertionerror', 'assert', 'expected', 'received',
+                                                        'tobe', 'toequal', 'failed', 'wrong result',
+                                                        'does not match', 'mismatch']):
+            return "LOGIC"
+        
+        # Default to LOGIC for test failures
+        return "LOGIC"
