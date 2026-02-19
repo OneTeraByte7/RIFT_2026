@@ -317,7 +317,7 @@ Return ONLY the fixed code, no markdown, no explanation."""
         return fixed_content, applied_fixes
     
     def _generate_commit_message(self, failure: Dict[str, Any], file_path: str) -> str:
-        """Generate descriptive commit message"""
+        """Generate descriptive commit message in exact format required by test cases"""
         bug_type = failure["bug_type"]
         line = failure["line"]
         
@@ -332,7 +332,8 @@ Return ONLY the fixed code, no markdown, no explanation."""
         
         action = action_map.get(bug_type, "fix the issue")
         
-        return f"[AI-AGENT] Fix {bug_type} error in {file_path} line {line} → {action}"
+        # Format: "BUG_TYPE error in file line X → Fix: action"
+        return f"{bug_type} error in {file_path} line {line} → Fix: {action}"
     
     async def verify_fix(self, repo_path: str, rel_path: str) -> bool:
         """Quick syntax check to verify a fix didn't break syntax"""
