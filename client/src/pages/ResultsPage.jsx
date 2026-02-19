@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 
@@ -254,6 +254,7 @@ export default function ResultsPage() {
   const [error, setError] = useState(null)
   const [mounted, setMounted] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const intervalRef = useRef(null)
 
   useEffect(() => { setTimeout(() => setMounted(true), 50) }, [])
 
@@ -265,8 +266,13 @@ export default function ResultsPage() {
     }
 
     fetchRunData()
-    const interval = setInterval(fetchRunData, 2000)
-    return () => clearInterval(interval)
+    intervalRef.current = setInterval(fetchRunData, 2000)
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
   }, [runId])
 
   const fetchRunData = async () => {
@@ -278,12 +284,28 @@ export default function ResultsPage() {
       const result = await response.json()
       setData(result)
       setLoading(false)
-      setIsInitialLoad(false) // Mark that we've loaded data at least once
+      setIsInitialLoad(false)
+      
+      // Stop polling if status is final
+      const finalStatuses = ['COMPLETED', 'FAILED', 'ERROR', 'CANCELLED', 'PASSED']
+      if (result.final_status && finalStatuses.includes(result.final_status.toUpperCase())) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+          intervalRef.current = null
+          console.log('Polling stopped - final status reached:', result.final_status)
+        }
+      }
     } catch (err) {
       console.error('Error fetching run data:', err)
       setError(err.message)
       setLoading(false)
       setIsInitialLoad(false)
+      
+      // Stop polling on error
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
     }
   }
 

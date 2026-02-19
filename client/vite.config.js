@@ -18,6 +18,9 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist'
+    },
+    preview: {
+      port: 3000
     }
   }
 })
