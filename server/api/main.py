@@ -35,8 +35,18 @@ if platform.system() == 'Windows':
 
 from agents.orchestrator import CICDHealingOrchestrator
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging with more detailed format and force flush
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    force=True
+)
 logger = logging.getLogger(__name__)
+
+# Force stdout/stderr to be unbuffered for Render
+import sys
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 
 @asynccontextmanager
@@ -280,5 +290,7 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=int(os.getenv("PORT", "8000")),
         reload=os.getenv("ENV", "production") == "development",
-        log_level="info"
+        log_level="info",
+        access_log=True,
+        use_colors=False  # Better for Render logs
     )

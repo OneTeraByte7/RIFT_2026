@@ -257,14 +257,19 @@ class CICDHealingOrchestrator:
         score = calculate_score(state)
         
         # Determine final status:
-        # - PASSED if all tests passed OR if fixes were applied and no failures remain
+        # - PASSED if all tests passed OR no failures found OR fixes applied successfully
         # - FAILED if there are still failures after max iterations
         if state["all_tests_passed"]:
             final_status = "PASSED"
-        elif state["total_fixes"] > 0 and state["total_failures"] == 0:
+        elif state["total_failures"] == 0:
+            # No failures detected at all - tests are passing
             final_status = "PASSED"
-        elif len(state["failures"]) == 0 and state["total_fixes"] > 0:
-            final_status = "PASSED" 
+        elif state["total_fixes"] > 0 and len(state["failures"]) == 0:
+            # Had failures, applied fixes, and now no failures remain
+            final_status = "PASSED"
+        elif len(state["failures"]) > 0 and state["iteration"] >= state["max_iterations"]:
+            # Still have failures after max iterations
+            final_status = "FAILED"
         else:
             final_status = "FAILED"
         
