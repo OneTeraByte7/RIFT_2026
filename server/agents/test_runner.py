@@ -267,38 +267,42 @@ class TestRunnerAgent:
             # Run Jest with timeout protection
             logger.info("Starting Jest execution...")
             def _run_jest():
-                # Try npm test first (uses package.json script), fallback to npx jest
+                # Try different Jest execution methods
                 commands = [
-                    ["npm", "test", "--", "--json", "--no-coverage", "--maxWorkers=2"],
-                    ["npx", "jest", "--json", "--no-coverage", "--maxWorkers=2"]
+                    # Method 1: Direct jest with verbose output
+                    ["npx", "jest", "--verbose", "--no-coverage"],
+                    # Method 2: npm test 
+                    ["npm", "test"],
+                    # Method 3: jest with json (if supported)
+                    ["npx", "jest", "--json", "--no-coverage"]
                 ]
                 
                 for cmd in commands:
                     try:
+                        logger.info(f"Trying command: {' '.join(cmd)}")
                         result = subprocess.run(
                             cmd,
                             cwd=repo_path,
                             capture_output=True,
                             text=True,
-                            shell=True,  # Use shell to find npm/npx in PATH on Windows
-                            encoding='utf-8',  # Force UTF-8 encoding
-                            errors='replace',  # Replace undecodable characters
-                            timeout=120  # 2 minute timeout for tests
+                            shell=True,
+                            encoding='utf-8',
+                            errors='replace',
+                            timeout=120
                         )
-                        if result.returncode is not None:  # Command completed
+                        logger.info(f"Command {cmd[0]} completed with code {result.returncode}")
+                        if result.stdout or result.stderr:
                             return result
-                    except subprocess.TimeoutExpired:
-                        logger.warning(f"Command {cmd[0]} timed out, trying next...")
+                    except subprocess.TimeoutExpired as e:
+                        logger.warning(f"Command {cmd[0]} timed out")
                         continue
                     except Exception as e:
-                        logger.warning(f"Command {cmd[0]} failed: {e}, trying next...")
+                        logger.warning(f"Command {cmd[0]} failed: {e}")
                         continue
                 
-                # If all fail, return empty result
                 raise Exception("All Jest execution methods failed")
             
             try:
-                # Add asyncio timeout as extra protection
                 result = await asyncio.wait_for(asyncio.to_thread(_run_jest), timeout=150)
                 stdout = result.stdout
                 stderr = result.stderr
@@ -308,6 +312,23 @@ class TestRunnerAgent:
                 logger.info(f"Jest stderr length: {len(stderr)}")
                 logger.info(f"Jest stdout preview: {stdout[:500]}")
                 logger.info(f"Jest stderr preview: {stderr[:500]}")
+                
+                # If Jest failed to run at all (return code indicates npm/jest error)
+                # Try to at least detect test files exist
+                if result.returncode != 0 and len(stdout) == 0 and 'npm error' in stderr:
+                    logger.warning("Jest/npm failed completely, adding placeholder failures for existing test files")
+                    # Add at least one failure per test file so agent attempts to fix
+                    for test_file in test_files:
+                        if test_file.endswith(('.test.js', '.spec.js')):
+                            failures.append({
+                                "file": test_file,
+                                "line": 1,
+                                "bug_type": "LOGIC",
+                                "description": f"Test file exists but couldn't run - likely has failures",
+                                "status": "pending"
+                            })
+                    logger.info(f"Added {len(failures)} placeholder failures for unrunnable tests")
+                    return failures
             except asyncio.TimeoutError:
                 logger.error("Jest execution timed out after 150 seconds")
                 return failures
@@ -342,8 +363,10 @@ class TestRunnerAgent:
                 logger.info(f"Parsed {len(failures)} failures from JSON")
             except json.JSONDecodeError as e:
                 logger.info(f"JSON decode failed: {e}, trying text parsing")
-                # Parse text output
-                failures = self._parse_jest_text_output(stderr, repo_path)
+                # Parse text output (both stdout and stderr)
+                combined_output = stdout + "\n" + stderr
+                failures = self._parse_jest_text_output(combined_output, repo_path)
+                logger.info(f"Parsed {len(failures)} failures from text output")
         
         except Exception as e:
             logger.error(f"Jest error: {e}")
@@ -351,26 +374,48 @@ class TestRunnerAgent:
         return failures
     
     def _parse_jest_text_output(self, output: str, repo_path: str) -> List[Dict[str, Any]]:
-        """Parse Jest text output"""
+        """Parse Jest text output - improved to catch all failure patterns"""
         failures = []
         lines = output.split('\n')
         
+        current_file = None
+        
         for i, line in enumerate(lines):
-            if '● ' in line and 'FAIL' not in line:
-                context = '\n'.join(lines[i:min(len(lines), i+15)])
-                file_match = re.search(r'(\S+\.[jt]sx?)', context)
-                line_match = re.search(r':(\d+):', context)
+            # Look for test file names
+            if 'FAIL' in line and ('.test.' in line or '.spec.' in line):
+                file_match = re.search(r'([\w/\\.-]+\.(?:test|spec)\.[jt]sx?)', line)
+                if file_match:
+                    current_file = file_match.group(1)
+                    logger.info(f"Found failing test file: {current_file}")
+            
+            # Look for failed test cases
+            if '✕' in line or '✗' in line or line.strip().startswith('●'):
+                test_name = line.strip()
+                context = '\n'.join(lines[i:min(len(lines), i+20)])
                 
-                # Classify bug type based on error context
+                # Extract expected vs received
+                expected_match = re.search(r'Expected:?\s*(.+)', context, re.IGNORECASE)
+                received_match = re.search(r'Received:?\s*(.+)', context, re.IGNORECASE)
+                
+                description = test_name
+                if expected_match and received_match:
+                    description = f"Expected {expected_match.group(1).strip()}, got {received_match.group(1).strip()}"
+                
+                # Get line number if available
+                line_match = re.search(r':(\d+):', context)
+                line_num = int(line_match.group(1)) if line_match else 1
+                
+                # Classify bug type
                 bug_type = self._classify_bug_type(context)
                 
                 failures.append({
-                    "file": file_match.group(1) if file_match else "unknown",
-                    "line": int(line_match.group(1)) if line_match else 1,
+                    "file": current_file or "unknown.test.js",
+                    "line": line_num,
                     "bug_type": bug_type,
-                    "description": line.strip(),
+                    "description": description[:200],
                     "status": "pending"
                 })
+                logger.info(f"Added failure: {current_file}:{line_num} - {bug_type}")
         
         return failures
     

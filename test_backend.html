@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backend Test</title>
+</head>
+<body>
+    <h1>Testing Backend API</h1>
+    <div id="output"></div>
+    
+    <script>
+        async function testBackend() {
+            const output = document.getElementById('output');
+            
+            try {
+                // Test 1: Health check
+                output.innerHTML += '<h2>Test 1: Health Check</h2>';
+                const health = await fetch('https://rift-2026-ks1l.onrender.com/health');
+                const healthData = await health.json();
+                output.innerHTML += `<pre>${JSON.stringify(healthData, null, 2)}</pre>`;
+                
+                // Test 2: Get specific run
+                output.innerHTML += '<h2>Test 2: Get Run Details</h2>';
+                const run = await fetch('https://rift-2026-ks1l.onrender.com/api/run/run_1771556873983');
+                const runData = await run.json();
+                output.innerHTML += `<pre>${JSON.stringify(runData, null, 2)}</pre>`;
+                
+                // Show key info
+                output.innerHTML += '<h2>Key Information:</h2>';
+                output.innerHTML += `<p><strong>Total Failures:</strong> ${runData.total_failures || 0}</p>`;
+                output.innerHTML += `<p><strong>Total Fixes:</strong> ${runData.total_fixes || 0}</p>`;
+                output.innerHTML += `<p><strong>Final Status:</strong> ${runData.final_status}</p>`;
+                output.innerHTML += `<p><strong>Fixes Array Length:</strong> ${runData.fixes_applied?.length || 0}</p>`;
+                output.innerHTML += `<p><strong>Branch Name:</strong> ${runData.branch_name}</p>`;
+                
+            } catch (error) {
+                output.innerHTML += `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        testBackend();
+    </script>
+</body>
+</html>
