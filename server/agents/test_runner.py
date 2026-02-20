@@ -115,17 +115,30 @@ class TestRunnerAgent:
         failures = []
         
         try:
-            # Install dependencies if requirements.txt exists
+            # Install dependencies only if requirements.txt exists and not already installed
             req_file = os.path.join(repo_path, "requirements.txt")
-            if os.path.exists(req_file):
+            installed_marker = os.path.join(repo_path, ".deps_installed")
+            
+            if os.path.exists(req_file) and not os.path.exists(installed_marker):
+                logger.info("Installing Python dependencies...")
                 def _install():
                     return subprocess.run(
                         ["pip", "install", "-r", req_file, "--quiet"],
                         cwd=repo_path,
                         capture_output=True,
-                        text=True
+                        text=True,
+                        timeout=180  # 3 minute timeout
                     )
-                await asyncio.to_thread(_install)
+                try:
+                    await asyncio.to_thread(_install)
+                    # Create marker file
+                    with open(installed_marker, 'w') as f:
+                        f.write('installed')
+                    logger.info("pip install completed")
+                except Exception as e:
+                    logger.warning(f"pip install error: {e}")
+            else:
+                logger.info("Skipping pip install - dependencies already installed")
             
             # Run pytest with verbose output
             def _run_pytest():
@@ -226,30 +239,42 @@ class TestRunnerAgent:
         failures = []
         
         try:
-            # Install dependencies
-            if os.path.exists(os.path.join(repo_path, "package.json")):
+            # Install dependencies only if node_modules doesn't exist
+            package_json_path = os.path.join(repo_path, "package.json")
+            node_modules_path = os.path.join(repo_path, "node_modules")
+            
+            if os.path.exists(package_json_path) and not os.path.exists(node_modules_path):
+                logger.info("Installing npm dependencies...")
                 def _install():
                     return subprocess.run(
                         ["npm", "install", "--silent"],
                         cwd=repo_path,
                         capture_output=True,
                         text=True,
-                        shell=True,  # Use shell to find npm in PATH on Windows
-                        encoding='utf-8',  # Force UTF-8 encoding
-                        errors='replace'  # Replace undecodable characters
+                        shell=True,
+                        encoding='utf-8',
+                        errors='replace',
+                        timeout=180  # 3 minute timeout
                     )
-                await asyncio.to_thread(_install)
+                try:
+                    await asyncio.to_thread(_install)
+                    logger.info("npm install completed")
+                except Exception as e:
+                    logger.warning(f"npm install error: {e}")
+            else:
+                logger.info("Skipping npm install - dependencies already installed")
             
             # Run Jest
             def _run_jest():
                 return subprocess.run(
-                    ["npx", "jest", "--json", "--no-coverage"],
+                    ["npx", "jest", "--json", "--no-coverage", "--maxWorkers=2"],
                     cwd=repo_path,
                     capture_output=True,
                     text=True,
                     shell=True,  # Use shell to find npx in PATH on Windows
                     encoding='utf-8',  # Force UTF-8 encoding
-                    errors='replace'  # Replace undecodable characters
+                    errors='replace',  # Replace undecodable characters
+                    timeout=120  # 2 minute timeout for tests
                 )
             
             result = await asyncio.to_thread(_run_jest)
