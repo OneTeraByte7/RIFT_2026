@@ -256,13 +256,12 @@ class CICDHealingOrchestrator:
         logger.info("Finalizing results...")
         score = calculate_score(state)
         
-        # Determine final status:
-        # - NO_ISSUES_FOUND if no failures were ever detected (healthy from start)
-        # - PASSED if all tests passed after applying fixes
+        # Determine final status per RIFT spec:
+        # - PASSED if no failures OR all tests passed after fixes
         # - FAILED if there are still failures after max iterations
-        if state["total_failures"] == 0 and state["total_fixes"] == 0:
-            # No failures detected at all - repository was already healthy
-            final_status = "NO_ISSUES_FOUND"
+        if state["total_failures"] == 0:
+            # No failures detected at all - tests are passing
+            final_status = "PASSED"
         elif state["all_tests_passed"]:
             # Tests passed after fixes
             final_status = "PASSED"
