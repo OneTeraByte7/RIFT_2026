@@ -10,15 +10,19 @@ function Orb({ className, style }) {
 // Status Badge Component
 function StatusBadge({ status }) {
   const isSuccess = status === 'PASSED' || status === 'COMPLETED'
+  const isHealthy = status === 'NO_ISSUES_FOUND'
+  
   return (
     <span className={`
       inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-sm uppercase tracking-wider
       ${isSuccess 
         ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' 
+        : isHealthy
+        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
         : 'bg-red-500 text-white shadow-lg shadow-red-500/30'
       }
     `}>
-      {isSuccess ? '✓' : '✗'} {status}
+      {isSuccess ? '✓' : isHealthy ? 'ℹ' : '✗'} {isHealthy ? 'HEALTHY CODEBASE' : status}
     </span>
   )
 }
@@ -287,7 +291,7 @@ export default function ResultsPage() {
       setIsInitialLoad(false)
       
       // Stop polling if status is final
-      const finalStatuses = ['COMPLETED', 'FAILED', 'ERROR', 'CANCELLED', 'PASSED']
+      const finalStatuses = ['COMPLETED', 'FAILED', 'ERROR', 'CANCELLED', 'PASSED', 'NO_ISSUES_FOUND']
       if (result.final_status && finalStatuses.includes(result.final_status.toUpperCase())) {
         if (intervalRef.current) {
           clearInterval(intervalRef.current)
@@ -473,18 +477,19 @@ export default function ResultsPage() {
               <p className="text-blue-700 font-bold uppercase tracking-wide text-xs sm:text-sm">Agent is running... Results update automatically</p>
             </div>
           </div>
-        ) : data && data.final_status === 'PASSED' && (data.total_failures === 0 && data.total_fixes === 0) ? (
-          // Show success message when no failures found
-          <div className={`mb-6 sm:mb-8 stat-card p-6 sm:p-8 rounded-3xl border-l-4 border-green-500 transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+        ) : data && (data.final_status === 'NO_ISSUES_FOUND' || (data.final_status === 'PASSED' && data.total_failures === 0 && data.total_fixes === 0)) ? (
+          // Show message when no failures found - healthy repository
+          <div className={`mb-6 sm:mb-8 stat-card p-6 sm:p-8 rounded-3xl border-l-4 border-blue-500 transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="sm:w-7 sm:h-7">
-                  <path d="M20 6L9 17l-5-5" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M12 2a10 10 0 100 20 10 10 0 000-20z" stroke="#3b82f6" strokeWidth="2" fill="none"/>
+                  <path d="M12 16v-4M12 8h.01" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round"/>
                 </svg>
               </div>
               <div>
-                <h3 className="font-display text-lg sm:text-xl font-bold text-green-700 uppercase mb-1">All Tests Passing!</h3>
-                <p className="text-green-600 text-xs sm:text-sm">No failures detected - your codebase is healthy ✨</p>
+                <h3 className="font-display text-lg sm:text-xl font-bold text-blue-700 uppercase mb-1">No Issues Found</h3>
+                <p className="text-blue-600 text-xs sm:text-sm">The repository already has all tests passing - no fixes needed! ✨</p>
               </div>
             </div>
           </div>

@@ -257,12 +257,14 @@ class CICDHealingOrchestrator:
         score = calculate_score(state)
         
         # Determine final status:
-        # - PASSED if all tests passed OR no failures found OR fixes applied successfully
+        # - NO_ISSUES_FOUND if no failures were ever detected (healthy from start)
+        # - PASSED if all tests passed after applying fixes
         # - FAILED if there are still failures after max iterations
-        if state["all_tests_passed"]:
-            final_status = "PASSED"
-        elif state["total_failures"] == 0:
-            # No failures detected at all - tests are passing
+        if state["total_failures"] == 0 and state["total_fixes"] == 0:
+            # No failures detected at all - repository was already healthy
+            final_status = "NO_ISSUES_FOUND"
+        elif state["all_tests_passed"]:
+            # Tests passed after fixes
             final_status = "PASSED"
         elif state["total_fixes"] > 0 and len(state["failures"]) == 0:
             # Had failures, applied fixes, and now no failures remain
