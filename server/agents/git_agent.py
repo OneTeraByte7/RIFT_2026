@@ -35,7 +35,11 @@ class GitAgent:
         repo_name = repo_url.rstrip('/').split('/')[-1].replace('.git', '')
         # Remove any invalid characters for Windows paths
         repo_name = re.sub(r'[<>:"/\\|?*]', '_', repo_name)
-        repo_dir = os.path.join(base_dir, f"{repo_name}_{int(asyncio.get_event_loop().time())}")
+        
+        # Use time.time() instead of asyncio event loop time for proper timestamp
+        import time
+        timestamp = int(time.time() * 1000)  # milliseconds
+        repo_dir = os.path.join(base_dir, f"{repo_name}_{timestamp}")
         repo_dir = os.path.normpath(repo_dir)  # Normalize path for Windows
         
         # Inject token for private repos if available
@@ -52,7 +56,9 @@ class GitAgent:
             result = subprocess.run(
                 ["git", "clone", clone_url, repo_dir, "--depth", "1"],
                 capture_output=True,
-                text=True
+                text=True,
+                encoding='utf-8',
+                errors='replace'
             )
             if result.returncode != 0:
                 error_msg = result.stderr
@@ -62,6 +68,19 @@ class GitAgent:
             return result
         
         await asyncio.to_thread(_clone)
+        
+        # Fix potential encoding issues in package.json on Windows
+        package_json_path = os.path.join(repo_dir, "package.json")
+        if os.path.exists(package_json_path):
+            try:
+                # Read and rewrite with proper UTF-8 encoding
+                with open(package_json_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
+                    content = f.read()
+                with open(package_json_path, 'w', encoding='utf-8', newline='\n') as f:
+                    f.write(content)
+                logger.info("Fixed package.json encoding")
+            except Exception as e:
+                logger.warning(f"Could not fix package.json encoding: {e}")
         
         # Configure git identity
         await self._run_git(repo_dir, "config", "user.name", self.git_user)
@@ -116,6 +135,23 @@ class GitAgent:
         await self._run_git(repo_path, "push", "-u", "origin", branch_name, "--force")
         
         logger.info(f"Committed and pushed: {message}")
+    
+    async def push_branch(self, repo_path: str, branch_name: str):
+        """Push branch to remote (even if empty, to make it visible on GitHub)"""
+        try:
+            # Try to push the branch
+            await self._run_git(repo_path, "push", "-u", "origin", branch_name)
+            logger.info(f"Pushed branch {branch_name} to origin")
+        except Exception as e:
+            # If push fails (empty branch), create an empty commit first
+            logger.info(f"Branch push failed, creating initial commit: {e}")
+            try:
+                await self._run_git(repo_path, "commit", "--allow-empty", "-m", "[AI-AGENT] Initialize branch for healing")
+                await self._run_git(repo_path, "push", "-u", "origin", branch_name)
+                logger.info(f"Pushed branch {branch_name} with initial commit")
+            except Exception as e2:
+                logger.error(f"Failed to push branch: {e2}")
+                raise
     
     async def get_current_branch(self, repo_path: str) -> str:
         """Get current branch name"""

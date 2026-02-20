@@ -189,6 +189,15 @@ class CICDHealingOrchestrator:
     async def _create_branch(self, state: AgentState) -> AgentState:
         logger.info(f"Creating branch: {state['branch_name']}")
         await self.git_agent.create_branch(state["repo_path"], state["branch_name"])
+        
+        # Push the branch immediately so it's visible on GitHub
+        # Create an initial commit to ensure branch exists remotely
+        try:
+            await self.git_agent.push_branch(state["repo_path"], state["branch_name"])
+            logger.info(f"Pushed branch {state['branch_name']} to remote")
+        except Exception as e:
+            logger.warning(f"Could not push empty branch: {e}")
+        
         return {**state, "messages": state["messages"] + [f"Created branch {state['branch_name']}"]}
     
     async def _run_tests(self, state: AgentState) -> AgentState:

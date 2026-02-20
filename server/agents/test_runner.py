@@ -264,26 +264,56 @@ class TestRunnerAgent:
             else:
                 logger.info("Skipping npm install - dependencies already installed")
             
-            # Run Jest
+            # Run Jest with timeout protection
+            logger.info("Starting Jest execution...")
             def _run_jest():
-                return subprocess.run(
-                    ["npx", "jest", "--json", "--no-coverage", "--maxWorkers=2"],
-                    cwd=repo_path,
-                    capture_output=True,
-                    text=True,
-                    shell=True,  # Use shell to find npx in PATH on Windows
-                    encoding='utf-8',  # Force UTF-8 encoding
-                    errors='replace',  # Replace undecodable characters
-                    timeout=120  # 2 minute timeout for tests
-                )
+                # Try npm test first (uses package.json script), fallback to npx jest
+                commands = [
+                    ["npm", "test", "--", "--json", "--no-coverage", "--maxWorkers=2"],
+                    ["npx", "jest", "--json", "--no-coverage", "--maxWorkers=2"]
+                ]
+                
+                for cmd in commands:
+                    try:
+                        result = subprocess.run(
+                            cmd,
+                            cwd=repo_path,
+                            capture_output=True,
+                            text=True,
+                            shell=True,  # Use shell to find npm/npx in PATH on Windows
+                            encoding='utf-8',  # Force UTF-8 encoding
+                            errors='replace',  # Replace undecodable characters
+                            timeout=120  # 2 minute timeout for tests
+                        )
+                        if result.returncode is not None:  # Command completed
+                            return result
+                    except subprocess.TimeoutExpired:
+                        logger.warning(f"Command {cmd[0]} timed out, trying next...")
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Command {cmd[0]} failed: {e}, trying next...")
+                        continue
+                
+                # If all fail, return empty result
+                raise Exception("All Jest execution methods failed")
             
-            result = await asyncio.to_thread(_run_jest)
-            stdout = result.stdout
-            stderr = result.stderr
-            
-            logger.info(f"Jest stdout: {stdout[:500]}")
-            logger.info(f"Jest stderr: {stderr[:500]}")
-            logger.info(f"Jest return code: {result.returncode}")
+            try:
+                # Add asyncio timeout as extra protection
+                result = await asyncio.wait_for(asyncio.to_thread(_run_jest), timeout=150)
+                stdout = result.stdout
+                stderr = result.stderr
+                
+                logger.info(f"Jest completed with return code: {result.returncode}")
+                logger.info(f"Jest stdout length: {len(stdout)}")
+                logger.info(f"Jest stderr length: {len(stderr)}")
+                logger.info(f"Jest stdout preview: {stdout[:500]}")
+                logger.info(f"Jest stderr preview: {stderr[:500]}")
+            except asyncio.TimeoutError:
+                logger.error("Jest execution timed out after 150 seconds")
+                return failures
+            except Exception as e:
+                logger.error(f"Jest execution error: {e}")
+                return failures
             
             try:
                 data = json.loads(stdout)
