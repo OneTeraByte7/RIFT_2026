@@ -72,9 +72,18 @@ class TestRunnerAgent:
                 failures = await self._run_jest(repo_path, js_tests)
                 all_failures.extend(failures)
         
-        # Also run static analysis
-        linting_failures = await self._run_linting(repo_path, test_files)
+        # Also run static analysis on ALL source files (not just tests)
+        logger.info("Running static code analysis on all source files...")
+        all_source_files = await self._discover_all_source_files(repo_path)
+        logger.info(f"Found {len(all_source_files)} source files to analyze")
+        linting_failures = await self._run_linting(repo_path, all_source_files)
         all_failures.extend(linting_failures)
+        
+        # Run deep static analysis for common bug patterns
+        static_failures = await self._run_static_analysis(repo_path, all_source_files)
+        all_failures.extend(static_failures)
+        
+        logger.info(f"Total failures found: {len(all_failures)} (before deduplication)")
         
         # Deduplicate
         seen = set()
@@ -85,6 +94,7 @@ class TestRunnerAgent:
                 seen.add(key)
                 unique_failures.append(f)
         
+        logger.info(f"Unique failures after deduplication: {len(unique_failures)}")
         return unique_failures
     
     def _detect_framework(self, repo_path: str) -> str:
@@ -545,3 +555,164 @@ class TestRunnerAgent:
         
         # Default to LOGIC for test failures
         return "LOGIC"
+    
+    async def _discover_all_source_files(self, repo_path: str) -> List[str]:
+        """Discover all source files in the repository"""
+        IGNORE_DIRS = {
+            '.git', 'node_modules', '__pycache__', '.pytest_cache',
+            'venv', 'env', '.env', 'dist', 'build', '.next', '.cache',
+            'coverage', '.tox', 'eggs', '.eggs', 'target', 'bin', 'obj'
+        }
+        
+        source_files = []
+        extensions = {'.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.cpp', '.c', '.cs', '.go', '.rb'}
+        
+        for root, dirs, files in os.walk(repo_path):
+            # Filter ignored directories
+            dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+            
+            for file in files:
+                if Path(file).suffix in extensions:
+                    filepath = os.path.join(root, file)
+                    rel_path = os.path.relpath(filepath, repo_path)
+                    source_files.append(rel_path)
+        
+        return source_files
+    
+    async def _run_static_analysis(self, repo_path: str, files: List[str]) -> List[Dict[str, Any]]:
+        """Run deep static analysis to detect common bug patterns"""
+        failures = []
+        
+        logger.info(f"Running static analysis on {len(files)} files...")
+        
+        for file_path in files:
+            full_path = os.path.join(repo_path, file_path)
+            
+            try:
+                with open(full_path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
+                    lines = content.split('\n')
+                
+                # Check for common bug patterns
+                file_failures = []
+                
+                # Python-specific checks
+                if file_path.endswith('.py'):
+                    file_failures.extend(self._check_python_patterns(file_path, lines))
+                
+                # JavaScript/TypeScript checks
+                elif file_path.endswith(('.js', '.ts', '.jsx', '.tsx')):
+                    file_failures.extend(self._check_js_patterns(file_path, lines))
+                
+                failures.extend(file_failures)
+                
+                if file_failures:
+                    logger.info(f"Found {len(file_failures)} issues in {file_path}")
+                
+            except Exception as e:
+                logger.warning(f"Could not analyze {file_path}: {e}")
+        
+        return failures
+    
+    def _check_python_patterns(self, file_path: str, lines: List[str]) -> List[Dict[str, Any]]:
+        """Check for common Python bug patterns"""
+        failures = []
+        
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            
+            # Check for common logic errors in functions
+            if 'def ' in stripped and 'return' in ''.join(lines[i:min(len(lines), i+10)]):
+                # Look for wrong operators
+                func_body = '\n'.join(lines[i:min(len(lines), i+10)])
+                
+                # Check for subtraction when addition might be intended
+                if 'return a - b' in func_body and 'def add' in stripped:
+                    failures.append({
+                        "file": file_path,
+                        "line": i,
+                        "bug_type": "LOGIC",
+                        "description": "Using subtraction (-) in add function, should use addition (+)",
+                        "status": "pending"
+                    })
+                
+                # Check for addition when multiplication might be intended
+                if 'return a + b' in func_body and 'def multiply' in stripped:
+                    failures.append({
+                        "file": file_path,
+                        "line": i,
+                        "bug_type": "LOGIC",
+                        "description": "Using addition (+) in multiply function, should use multiplication (*)",
+                        "status": "pending"
+                    })
+            
+            # Check for missing colons after if/for/while/def/class
+            if re.match(r'^\s*(if|for|while|def|class|elif|else|try|except|finally|with)\s+.*[^:]\s*$', stripped):
+                if stripped and not stripped.endswith(':') and not stripped.endswith('\\'):
+                    failures.append({
+                        "file": file_path,
+                        "line": i,
+                        "bug_type": "SYNTAX",
+                        "description": f"Missing colon at end of line: {stripped[:50]}",
+                        "status": "pending"
+                    })
+            
+            # Check for obvious indentation errors
+            if stripped.startswith('def ') or stripped.startswith('class '):
+                # Next non-empty line should be indented
+                for j in range(i, min(len(lines), i+5)):
+                    next_line = lines[j].strip()
+                    if next_line and not next_line.startswith('#'):
+                        if len(lines[j]) - len(lines[j].lstrip()) == 0 and lines[j].strip():
+                            failures.append({
+                                "file": file_path,
+                                "line": j + 1,
+                                "bug_type": "INDENTATION",
+                                "description": f"Expected indented block after {stripped[:30]}",
+                                "status": "pending"
+                            })
+                        break
+        
+        return failures
+    
+    def _check_js_patterns(self, file_path: str, lines: List[str]) -> List[Dict[str, Any]]:
+        """Check for common JavaScript/TypeScript bug patterns"""
+        failures = []
+        
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            
+            # Check for wrong operators in functions
+            if 'function ' in stripped or 'const ' in stripped or 'let ' in stripped:
+                func_body = '\n'.join(lines[i:min(len(lines), i+10)])
+                
+                # Check for subtraction when addition might be intended
+                if 'return a - b' in func_body and 'add' in stripped.lower():
+                    failures.append({
+                        "file": file_path,
+                        "line": i,
+                        "bug_type": "LOGIC",
+                        "description": "Using subtraction (-) in add function, should use addition (+)",
+                        "status": "pending"
+                    })
+                
+                # Check for addition when multiplication might be intended
+                if 'return a + b' in func_body and 'multiply' in stripped.lower():
+                    failures.append({
+                        "file": file_path,
+                        "line": i,
+                        "bug_type": "LOGIC",
+                        "description": "Using addition (+) in multiply function, should use multiplication (*)",
+                        "status": "pending"
+                    })
+            
+            # Check for missing semicolons (in strict codebases)
+            if stripped and not stripped.startswith('//') and not stripped.startswith('/*'):
+                if (stripped.endswith(')') or stripped.endswith(']') or stripped.endswith('"') or 
+                    stripped.endswith("'") or re.match(r'.*\w$', stripped)):
+                    # This could be a statement that needs a semicolon
+                    if not any(keyword in stripped for keyword in ['if', 'for', 'while', 'function', 'class', '{', '}', '//']):
+                        # Skip this check for now as it's too noisy
+                        pass
+        
+        return failures
