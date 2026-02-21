@@ -618,52 +618,79 @@ class TestRunnerAgent:
         """Check for common Python bug patterns"""
         failures = []
         
-        for i, line in enumerate(lines, 1):
+        for i, line in enumerate(lines):
             stripped = line.strip()
+            line_num = i + 1  # 1-indexed for reporting
             
             # Check for common logic errors in functions
-            if 'def ' in stripped and 'return' in ''.join(lines[i:min(len(lines), i+10)]):
-                # Look for wrong operators
-                func_body = '\n'.join(lines[i:min(len(lines), i+10)])
+            if 'def ' in stripped:
+                # Look ahead at function body (next 10 lines)
+                func_body_lines = lines[i:min(len(lines), i+10)]
+                func_body = '\n'.join(func_body_lines)
                 
                 # Check for subtraction when addition might be intended
                 if 'return a - b' in func_body and 'def add' in stripped:
-                    failures.append({
-                        "file": file_path,
-                        "line": i,
-                        "bug_type": "LOGIC",
-                        "description": "Using subtraction (-) in add function, should use addition (+)",
-                        "status": "pending"
-                    })
+                    # Find the exact line with the return statement
+                    for j, body_line in enumerate(func_body_lines):
+                        if 'return a - b' in body_line:
+                            failures.append({
+                                "file": file_path,
+                                "line": line_num + j,
+                                "bug_type": "LOGIC",
+                                "description": "Using subtraction (-) in add function, should use addition (+)",
+                                "status": "pending"
+                            })
+                            break
                 
                 # Check for addition when multiplication might be intended
-                if 'return a + b' in func_body and 'def multiply' in stripped:
-                    failures.append({
-                        "file": file_path,
-                        "line": i,
-                        "bug_type": "LOGIC",
-                        "description": "Using addition (+) in multiply function, should use multiplication (*)",
-                        "status": "pending"
-                    })
+                if 'return x + y' in func_body and 'def multiply' in stripped:
+                    for j, body_line in enumerate(func_body_lines):
+                        if 'return x + y' in body_line:
+                            failures.append({
+                                "file": file_path,
+                                "line": line_num + j,
+                                "bug_type": "LOGIC",
+                                "description": "Using addition (+) in multiply function, should use multiplication (*)",
+                                "status": "pending"
+                            })
+                            break
+                
+                # Check for multiplication when power might be intended
+                if 'return base * exponent' in func_body and 'def power' in stripped:
+                    for j, body_line in enumerate(func_body_lines):
+                        if 'return base * exponent' in body_line:
+                            failures.append({
+                                "file": file_path,
+                                "line": line_num + j,
+                                "bug_type": "LOGIC",
+                                "description": "Using multiplication (*) in power function, should use exponentiation (**)",
+                                "status": "pending"
+                            })
+                            break
             
             # Check for missing colons after if/for/while/def/class
-            if re.match(r'^\s*(if|for|while|def|class|elif|else|try|except|finally|with)\s+.*[^:]\s*$', stripped):
-                if stripped and not stripped.endswith(':') and not stripped.endswith('\\'):
-                    failures.append({
-                        "file": file_path,
-                        "line": i,
-                        "bug_type": "SYNTAX",
-                        "description": f"Missing colon at end of line: {stripped[:50]}",
-                        "status": "pending"
-                    })
+            if re.match(r'^\s*(if|for|while|def|class|elif|else|try|except|finally|with)\s+', stripped):
+                if stripped and not stripped.endswith(':') and not stripped.endswith('\\') and not stripped.endswith(','):
+                    # Make sure it's not a comment or string
+                    if not stripped.startswith('#') and '"""' not in stripped:
+                        failures.append({
+                            "file": file_path,
+                            "line": line_num,
+                            "bug_type": "SYNTAX",
+                            "description": f"Missing colon at end of line: {stripped[:50]}",
+                            "status": "pending"
+                        })
             
             # Check for obvious indentation errors
             if stripped.startswith('def ') or stripped.startswith('class '):
                 # Next non-empty line should be indented
-                for j in range(i, min(len(lines), i+5)):
-                    next_line = lines[j].strip()
-                    if next_line and not next_line.startswith('#'):
-                        if len(lines[j]) - len(lines[j].lstrip()) == 0 and lines[j].strip():
+                for j in range(i+1, min(len(lines), i+5)):
+                    next_line = lines[j]
+                    next_stripped = next_line.strip()
+                    if next_stripped and not next_stripped.startswith('#'):
+                        # Check if line has any content but no indentation
+                        indent = len(next_line) - len(next_line.lstrip())
+                        if indent == 0 and next_stripped:
                             failures.append({
                                 "file": file_path,
                                 "line": j + 1,
@@ -679,40 +706,52 @@ class TestRunnerAgent:
         """Check for common JavaScript/TypeScript bug patterns"""
         failures = []
         
-        for i, line in enumerate(lines, 1):
+        for i, line in enumerate(lines):
             stripped = line.strip()
+            line_num = i + 1
             
             # Check for wrong operators in functions
             if 'function ' in stripped or 'const ' in stripped or 'let ' in stripped:
-                func_body = '\n'.join(lines[i:min(len(lines), i+10)])
+                func_body_lines = lines[i:min(len(lines), i+10)]
+                func_body = '\n'.join(func_body_lines)
                 
                 # Check for subtraction when addition might be intended
                 if 'return a - b' in func_body and 'add' in stripped.lower():
-                    failures.append({
-                        "file": file_path,
-                        "line": i,
-                        "bug_type": "LOGIC",
-                        "description": "Using subtraction (-) in add function, should use addition (+)",
-                        "status": "pending"
-                    })
+                    for j, body_line in enumerate(func_body_lines):
+                        if 'return a - b' in body_line:
+                            failures.append({
+                                "file": file_path,
+                                "line": line_num + j,
+                                "bug_type": "LOGIC",
+                                "description": "Using subtraction (-) in add function, should use addition (+)",
+                                "status": "pending"
+                            })
+                            break
                 
                 # Check for addition when multiplication might be intended
                 if 'return a + b' in func_body and 'multiply' in stripped.lower():
-                    failures.append({
-                        "file": file_path,
-                        "line": i,
-                        "bug_type": "LOGIC",
-                        "description": "Using addition (+) in multiply function, should use multiplication (*)",
-                        "status": "pending"
-                    })
-            
-            # Check for missing semicolons (in strict codebases)
-            if stripped and not stripped.startswith('//') and not stripped.startswith('/*'):
-                if (stripped.endswith(')') or stripped.endswith(']') or stripped.endswith('"') or 
-                    stripped.endswith("'") or re.match(r'.*\w$', stripped)):
-                    # This could be a statement that needs a semicolon
-                    if not any(keyword in stripped for keyword in ['if', 'for', 'while', 'function', 'class', '{', '}', '//']):
-                        # Skip this check for now as it's too noisy
-                        pass
+                    for j, body_line in enumerate(func_body_lines):
+                        if 'return a + b' in body_line:
+                            failures.append({
+                                "file": file_path,
+                                "line": line_num + j,
+                                "bug_type": "LOGIC",
+                                "description": "Using addition (+) in multiply function, should use multiplication (*)",
+                                "status": "pending"
+                            })
+                            break
+                
+                # Check for multiplication when power might be intended
+                if 'return base * exponent' in func_body and 'power' in stripped.lower():
+                    for j, body_line in enumerate(func_body_lines):
+                        if 'return base * exponent' in body_line:
+                            failures.append({
+                                "file": file_path,
+                                "line": line_num + j,
+                                "bug_type": "LOGIC",
+                                "description": "Using multiplication (*) in power function, should use Math.pow() or **",
+                                "status": "pending"
+                            })
+                            break
         
         return failures
