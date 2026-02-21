@@ -162,12 +162,12 @@ export default function DetailsPage() {
       />
 
       {/* Main content */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center sm:justify-start px-4 sm:px-8 md:px-12 lg:px-20 pt-20 pb-10">
-        <div className="w-full max-w-md mx-auto sm:mx-0">
+      <div className="relative z-10 min-h-screen flex items-center justify-center px-4 sm:px-8 md:px-12 lg:px-20 pt-20 pb-10">
+        <div className="w-full max-w-md">
 
           {/* Page title */}
           <div className={`
-            mb-8 sm:mb-10 transition-all duration-700
+            mb-8 sm:mb-10 transition-all duration-700 text-center
             ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}
           `}>
             <p className="text-vigor-tealLight text-[10px] sm:text-xs font-bold tracking-[0.2em] uppercase mb-2 sm:mb-3 font-mono">
@@ -287,7 +287,7 @@ export default function DetailsPage() {
           </div>
 
           {/* Step indicator */}
-          <div className="mt-8 sm:mt-10 md:mt-12 flex items-center gap-2">
+          <div className="mt-8 sm:mt-10 md:mt-12 flex items-center justify-center gap-2">
             {[1, 2, 3].map(step => (
               <div key={step} className={`
                 h-1 rounded-full transition-all duration-500
