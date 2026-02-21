@@ -26,7 +26,7 @@ function StatusBadge({ status }) {
 // Run Summary Card
 function RunSummaryCard({ data }) {
   return (
-    <div className="stat-card p-6 sm:p-8 rounded-3xl lg:sticky lg:top-24">
+    <div className="stat-card sticky-summary-card p-6 sm:p-8 rounded-3xl lg:sticky lg:top-28 lg:self-start">
       <div className="flex items-center gap-3 mb-5 sm:mb-6">
         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-vigor-teal/10 flex items-center justify-center flex-shrink-0">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="sm:w-6 sm:h-6">
@@ -129,7 +129,7 @@ function FixesTable({ fixes }) {
               {fixes.map((fix, idx) => {
                 const isSuccess = fix.status === 'fixed' || fix.status === 'success'
                 return (
-                  <tr key={idx} className="border-b border-gray-100 hover:bg-vigor-tealPale/30 transition-colors">
+                  <tr key={idx} className="border-b border-gray-100 hover:bg-vigor-tealPale/30 transition-colors duration-200">
                     <td className="py-3 sm:py-4 px-2 sm:px-4 font-mono text-xs sm:text-sm text-gray-800 font-medium break-all">{fix.file}</td>
                     <td className="py-3 sm:py-4 px-2 sm:px-4 hidden sm:table-cell">
                       <span className={`
