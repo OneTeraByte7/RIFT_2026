@@ -113,11 +113,11 @@ function FixesTable({ fixes }) {
         <h2 className="font-display text-2xl sm:text-3xl font-bold text-gray-900 uppercase">Fixes Applied</h2>
       </div>
       
-      <div className="overflow-x-auto -mx-6 sm:mx-0">
-        <div className="inline-block min-w-full align-middle px-6 sm:px-0">
+      <div className="border border-gray-100 rounded-2xl bg-white overflow-hidden">
+        <div className="max-h-80 overflow-y-auto">
           <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-gray-200">
+            <thead className="sticky top-0 bg-white border-b-2 border-gray-200 z-10">
+              <tr>
                 <th className="text-left py-3 sm:py-4 px-2 sm:px-4 text-[10px] sm:text-xs font-black text-vigor-teal uppercase tracking-widest">File</th>
                 <th className="text-left py-3 sm:py-4 px-2 sm:px-4 text-[10px] sm:text-xs font-black text-vigor-teal uppercase tracking-widest hidden sm:table-cell">Bug Type</th>
                 <th className="text-center py-3 sm:py-4 px-2 sm:px-4 text-[10px] sm:text-xs font-black text-vigor-teal uppercase tracking-widest">Line</th>
@@ -202,42 +202,46 @@ function CICDTimeline({ runs, maxIterations = 5 }) {
         </span>
       </div>
       
-      <div className="space-y-5 sm:space-y-6">
-        {runs.map((run, idx) => {
-          const isPassed = run.status === 'PASSED' || run.status === 'SUCCESS'
-          return (
-            <div key={idx} className="flex items-start gap-3 sm:gap-5">
-              {/* Timeline indicator */}
-              <div className="flex flex-col items-center flex-shrink-0">
-                <div className={`
-                  w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-black text-sm sm:text-base shadow-lg
-                  ${isPassed ? 'bg-green-500 text-white shadow-green-500/30' : 'bg-red-500 text-white shadow-red-500/30'}
-                `}>
-                  {idx + 1}
-                </div>
-                {idx < runs.length - 1 && (
-                  <div className="w-1 h-12 sm:h-16 bg-gradient-to-b from-gray-300 to-gray-200 my-2 rounded-full" />
-                )}
-              </div>
-              
-              {/* Run details */}
-              <div className="flex-1 pb-2 min-w-0">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-2 sm:mb-3">
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-                    <h3 className="font-display font-bold text-lg sm:text-xl text-gray-900 uppercase">Run #{idx + 1}</h3>
-                    <StatusBadge status={run.status || 'RUNNING'} />
+      <div className="border border-gray-100 rounded-2xl bg-white overflow-hidden">
+        <div className="max-h-80 overflow-y-auto p-4 sm:p-6">
+          <div className="space-y-5 sm:space-y-6">
+            {runs.map((run, idx) => {
+              const isPassed = run.status === 'PASSED' || run.status === 'SUCCESS'
+              return (
+                <div key={idx} className="flex items-start gap-3 sm:gap-5">
+                  {/* Timeline indicator */}
+                  <div className="flex flex-col items-center flex-shrink-0">
+                    <div className={`
+                      w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-black text-sm sm:text-base shadow-lg
+                      ${isPassed ? 'bg-green-500 text-white shadow-green-500/30' : 'bg-red-500 text-white shadow-red-500/30'}
+                    `}>
+                      {idx + 1}
+                    </div>
+                    {idx < runs.length - 1 && (
+                      <div className="w-1 h-12 sm:h-16 bg-gradient-to-b from-gray-300 to-gray-200 my-2 rounded-full" />
+                    )}
                   </div>
-                  <span className="text-[10px] sm:text-xs text-gray-500 font-mono font-semibold bg-gray-100 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg self-start sm:self-auto">
-                    {run.timestamp ? new Date(run.timestamp).toLocaleString() : 'In progress'}
-                  </span>
+                  
+                  {/* Run details */}
+                  <div className="flex-1 pb-2 min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-2 sm:mb-3">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                        <h3 className="font-display font-bold text-lg sm:text-xl text-gray-900 uppercase">Run #{idx + 1}</h3>
+                        <StatusBadge status={run.status || 'RUNNING'} />
+                      </div>
+                      <span className="text-[10px] sm:text-xs text-gray-500 font-mono font-semibold bg-gray-100 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg self-start sm:self-auto">
+                        {run.timestamp ? new Date(run.timestamp).toLocaleString() : 'In progress'}
+                      </span>
+                    </div>
+                    {run.message && (
+                      <p className="text-xs sm:text-sm text-gray-600 mt-2 font-medium leading-relaxed break-words">{run.message}</p>
+                    )}
+                  </div>
                 </div>
-                {run.message && (
-                  <p className="text-xs sm:text-sm text-gray-600 mt-2 font-medium leading-relaxed break-words">{run.message}</p>
-                )}
-              </div>
-            </div>
-          )
-        })}
+              )
+            })}
+          </div>
+        </div>
       </div>
     </div>
   )
