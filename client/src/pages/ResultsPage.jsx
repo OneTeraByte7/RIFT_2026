@@ -277,8 +277,10 @@ export default function ResultsPage() {
 
   const fetchRunData = async () => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
-      const response = await fetch(`${apiUrl}/api/run/${runId}`)
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+        const fetchUrl = `${apiUrl}/api/run/${runId}`
+        console.debug('Fetching run data from', fetchUrl)
+        const response = await fetch(fetchUrl)
       if (!response.ok) throw new Error('Failed to fetch run data')
       
       const result = await response.json()
@@ -297,6 +299,7 @@ export default function ResultsPage() {
       }
     } catch (err) {
       console.error('Error fetching run data:', err)
+      console.debug('Fetch attempted URL', import.meta.env.VITE_API_URL || 'http://localhost:8000')
       setError(err.message)
       setLoading(false)
       setIsInitialLoad(false)
