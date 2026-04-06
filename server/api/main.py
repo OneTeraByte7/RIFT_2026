@@ -8,6 +8,16 @@ import os
 import json
 import asyncio
 import logging
+"""
+FastAPI Backend
+Provides REST API for the React dashboard to trigger agent runs
+and stream real-time results
+"""
+
+import os
+import json
+import asyncio
+import logging
 import platform
 import tempfile
 from typing import Dict, Any, Optional
@@ -43,8 +53,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Force stdout/stderr to be unbuffered for Render
-import sys
+# Force stdout/stderr to be unbuffered
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
@@ -56,9 +65,18 @@ async def lifespan(app: FastAPI):
     if platform.system() == 'Windows':
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
         logger.info("Windows ProactorEventLoop policy set")
-    
+
+    # Initialize orchestrator inside lifespan so import-time errors don't crash the process
+    global orchestrator
+    try:
+        orchestrator = CICDHealingOrchestrator()
+        logger.info("Orchestrator initialized successfully")
+    except Exception as e:
+        orchestrator = None
+        logger.exception(f"Failed to initialize orchestrator at startup: {e}")
+
     yield
-    
+
     # Shutdown (cleanup if needed)
     logger.info("Application shutting down")
 
@@ -87,8 +105,8 @@ app.add_middleware(
 run_results: Dict[str, Any] = {}
 run_progress: Dict[str, list] = {}
 
-# Global orchestrator
-orchestrator = CICDHealingOrchestrator()
+# Global orchestrator reference (set on startup)
+orchestrator: Optional[CICDHealingOrchestrator] = None
 
 
 class RunAgentRequest(BaseModel):
@@ -122,7 +140,7 @@ async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks)
     """
     import time
     run_id = f"run_{int(time.time() * 1000)}"
-    
+
     run_results[run_id] = {
         "status": "RUNNING",
         "started_at": datetime.now().isoformat(),
@@ -131,7 +149,12 @@ async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks)
         "leader_name": request.leader_name,
     }
     run_progress[run_id] = []
-    
+
+    # Ensure orchestrator is available
+    if orchestrator is None:
+        logger.error("Orchestrator not available; cannot start agent run")
+        raise HTTPException(status_code=503, detail="Orchestrator not available; check server logs")
+
     background_tasks.add_task(
         _run_agent_task,
         run_id,
@@ -139,7 +162,7 @@ async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks)
         request.team_name,
         request.leader_name
     )
-    
+
     return {"run_id": run_id, "status": "RUNNING", "message": "Agent started"}
 
 
@@ -148,7 +171,7 @@ async def get_run_status(run_id: str):
     """Get current status of a run"""
     if run_id not in run_results:
         raise HTTPException(status_code=404, detail="Run not found")
-    
+
     return {
         "run_id": run_id,
         **run_results[run_id],
@@ -164,29 +187,29 @@ async def stream_run_progress(run_id: str):
     """
     async def event_generator():
         last_count = 0
-        
+
         while True:
             if run_id not in run_results:
                 yield f"data: {json.dumps({'error': 'Run not found'})}\n\n"
                 break
-            
+
             current_status = run_results[run_id]
             messages = run_progress.get(run_id, [])
-            
+
             # Send new messages
             for msg in messages[last_count:]:
                 yield f"data: {json.dumps({'type': 'progress', 'message': msg})}\n\n"
             last_count = len(messages)
-            
+
             # Send status update
             yield f"data: {json.dumps({'type': 'status', 'data': current_status})}\n\n"
-            
+
             if current_status["status"] in ["COMPLETED", "FAILED", "ERROR"]:
                 yield f"data: {json.dumps({'type': 'done', 'data': current_status})}\n\n"
                 break
-            
+
             await asyncio.sleep(1)
-    
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
@@ -213,30 +236,30 @@ async def cancel_run(run_id: str):
     """Cancel a running agent"""
     if run_id not in run_results:
         raise HTTPException(status_code=404, detail="Run not found")
-    
+
     run_results[run_id]["status"] = "CANCELLED"
     return {"message": "Run cancelled"}
 
 
 async def _run_agent_task(run_id: str, repo_url: str, team_name: str, leader_name: str):
     """Background task that runs the full agent pipeline"""
-    
+
     # Ensure Windows event loop policy is set in this task's context
     if platform.system() == 'Windows':
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    
+
     def log_progress(msg: str):
         run_progress[run_id].append({
             "timestamp": datetime.now().isoformat(),
             "message": msg
         })
-    
+
     try:
         log_progress(f"Starting CI/CD healing agent for {repo_url}")
         log_progress(f"Team: {team_name} | Leader: {leader_name}")
-        
+
         result = await orchestrator.run(repo_url, team_name, leader_name)
-        
+
         # Update with full results
         run_results[run_id].update({
             "status": "COMPLETED",
@@ -250,12 +273,12 @@ async def _run_agent_task(run_id: str, repo_url: str, team_name: str, leader_nam
             "fixes_applied": result.get("fixes_applied", []),
             "cicd_runs": result.get("cicd_runs", []),
         })
-        
+
         log_progress(f"Completed! Status: {result.get('final_status')}")
-        
+
         # Save results.json
         save_results_file(run_id, result)
-    
+
     except Exception as e:
         logger.error(f"Agent run failed: {e}", exc_info=True)
         run_results[run_id].update({
@@ -271,16 +294,16 @@ def save_results_file(run_id: str, result: Dict[str, Any]):
     default_dir = os.path.join(tempfile.gettempdir(), "results") if platform.system() == 'Windows' else "/tmp/results"
     results_dir = os.getenv("RESULTS_DIR", default_dir)
     os.makedirs(results_dir, exist_ok=True)
-    
+
     results_path = os.path.join(results_dir, f"results_{run_id}.json")
     with open(results_path, "w") as f:
         json.dump(result, f, indent=2, default=str)
-    
+
     # Also save latest
     latest_path = os.path.join(results_dir, "results_latest.json")
     with open(latest_path, "w") as f:
         json.dump(result, f, indent=2, default=str)
-    
+
     logger.info(f"Results saved to {results_path}")
 
 
