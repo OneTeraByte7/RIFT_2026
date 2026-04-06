@@ -180,6 +180,74 @@ For each fix type:
 
 Return ONLY the fixed code, no markdown, no explanation."""
 
+        # --- Token-size safeguard and fallback handling ---
+        def estimate_tokens(text: str) -> int:
+            # rough heuristic: 1 token ~= 4 characters
+            return max(1, int(len(text) / 4))
+
+        MAX_TOKENS = int(os.getenv("MAX_TOKENS_PER_REQUEST", "8000"))
+        estimated = estimate_tokens(prompt)
+        if estimated > MAX_TOKENS:
+            logger.warning(f"Estimated prompt tokens {estimated} exceed threshold {MAX_TOKENS}")
+            # Try provider fallback (Groq -> Gemini -> Anthropic)
+            if self.provider == "groq":
+                if hasattr(self, 'model_name') and GEMINI_AVAILABLE and self.gemini_key:
+                    logger.info("Falling back from Groq to Gemini (new) due to token limit")
+                    self.provider = "gemini_new"
+                elif GEMINI_AVAILABLE and self.gemini_key:
+                    logger.info("Falling back from Groq to Gemini (old) due to token limit")
+                    self.provider = "gemini"
+                elif ANTHROPIC_AVAILABLE and self.anthropic_key:
+                    logger.info("Falling back from Groq to Anthropic due to token limit")
+                    self.provider = "anthropic"
+                else:
+                    logger.info("No alternate provider available; will attempt chunked requests with Groq")
+                    # Simple chunking by approx chars to keep each prompt under limit
+                    def chunk_text(text: str, approx_chars_per_chunk: int):
+                        parts = []
+                        i = 0
+                        length = len(text)
+                        while i < length:
+                            part = text[i:i+approx_chars_per_chunk]
+                            if i+approx_chars_per_chunk < length:
+                                nl = part.rfind('\n')
+                                if nl > int(approx_chars_per_chunk*0.6):
+                                    part = text[i:i+nl]
+                                    i = i + nl + 1
+                                else:
+                                    i = i + approx_chars_per_chunk
+                            else:
+                                i = length
+                            parts.append(part)
+                        return parts
+
+                    approx_chars = int(MAX_TOKENS * 4 * 0.6)
+                    chunks = chunk_text(original_content, approx_chars)
+                    logger.info(f"Splitting file into {len(chunks)} chunk(s) to avoid token limit")
+                    fixed_chunks = []
+                    for idx, chunk in enumerate(chunks, 1):
+                        chunk_prompt = prompt.replace(original_content, chunk)
+                        logger.info(f"Fixing chunk {idx}/{len(chunks)} (approx {len(chunk)} chars)")
+                        loop = asyncio.get_event_loop()
+                        response = await loop.run_in_executor(
+                            None,
+                            lambda c=chunk_prompt: self.client.chat.completions.create(
+                                model=self.model,
+                                messages=[{"role": "user", "content": c}],
+                                max_completion_tokens=4096,
+                                temperature=1,
+                                top_p=1,
+                                reasoning_effort="medium"
+                            )
+                        )
+                        part_fixed = response.choices[0].message.content.strip()
+                        part_fixed = re.sub(r'^```\w*\n?', '', part_fixed)
+                        part_fixed = re.sub(r'\n?```$', '', part_fixed).strip()
+                        fixed_chunks.append(part_fixed)
+
+                    fixed_content = '\n'.join(fixed_chunks)
+                    logger.info(f"Reassembled fixed content from chunks, length {len(fixed_content)}")
+
         try:
             if self.provider == "groq":
                 # Use Groq API
